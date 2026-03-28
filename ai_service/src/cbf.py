@@ -6,7 +6,6 @@ def get_cbf_recommendations(user_id: int, limit: int = 10):
     cursor = conn.cursor(dictionary=True)
 
     try:
-        # Take user's preferred genres
         cursor.execute(
             "SELECT preferred_genres FROM users WHERE user_id = %s",
             (user_id,)
@@ -14,43 +13,41 @@ def get_cbf_recommendations(user_id: int, limit: int = 10):
         user = cursor.fetchone()
 
         if not user or not user['preferred_genres']:
-            return {
-                "error": "No preferred genres found. Please update your profile."
-            }
+            return {"error": "No preferred genres found."}
 
-        # Take movies user has rated (for exclusion)
         cursor.execute(
             "SELECT movie_id FROM ratings WHERE user_id = %s",
             (user_id,)
         )
         rated_ids = [r['movie_id'] for r in cursor.fetchall()]
 
-        # Parse genres
         genres = [g.strip() for g in user['preferred_genres'].split(',')]
-
-        # Build query
         genre_conditions = ' OR '.join(['genres LIKE %s'] * len(genres))
         params = [f'%{g}%' for g in genres]
 
         exclude_clause = ''
         if rated_ids:
             placeholders = ','.join(['%s'] * len(rated_ids))
-            exclude_clause = f'AND movie_id NOT IN ({placeholders})'
+            exclude_clause = f'AND m.movie_id NOT IN ({placeholders})'
             params += rated_ids
 
+        # JOIN với ratings để lấy avg rating thật
         cursor.execute(
-            f"""SELECT movie_id, title, genres, actors, directors,
-                       plot, rate, vote_count, popularity, year_published, poster_path, trailer_key
-                FROM movies
+            f"""SELECT m.movie_id, m.title, m.genres, m.actors, m.directors,
+                       m.plot, m.popularity, m.year_published, 
+                       m.poster_path, m.trailer_key,
+                       ROUND(AVG(r.rating_score), 1) as avg_rating,
+                       COUNT(r.rating_score) as total_ratings
+                FROM movies m
+                LEFT JOIN ratings r ON m.movie_id = r.movie_id
                 WHERE ({genre_conditions}) {exclude_clause}
-                ORDER BY rate DESC, popularity DESC
+                GROUP BY m.movie_id
+                ORDER BY avg_rating DESC, m.popularity DESC
                 LIMIT %s""",
             params + [limit]
         )
         movies = cursor.fetchall()
 
-        # Calculate similarity score 
-        # Count genre match with preferred_genres
         for movie in movies:
             movie_genres = movie['genres'].split(',') if movie['genres'] else []
             matches = sum(
@@ -59,18 +56,17 @@ def get_cbf_recommendations(user_id: int, limit: int = 10):
             )
             movie['similarity_score'] = round(matches / max(len(genres), 1), 2)
 
-        # Sort based on similarity_score
         movies.sort(key=lambda x: (
             x['similarity_score'],
-            x['rate'] or 0,
+            float(x['avg_rating'] or 0),
             x['popularity'] or 0
         ), reverse=True)
 
         return {
-            "type":      "content-based",
-            "based_on":  user['preferred_genres'],
-            "total":     len(movies),
-            "data":      movies
+            "type":     "content-based",
+            "based_on": user['preferred_genres'],
+            "total":    len(movies),
+            "data":     movies
         }
 
     finally:

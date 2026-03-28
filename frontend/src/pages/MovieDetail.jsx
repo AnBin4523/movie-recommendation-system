@@ -1,6 +1,11 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { getMovieById, getTrailer, rateMovie } from "../services/api";
+import {
+  getMovieById,
+  getTrailer,
+  rateMovie,
+  getRatingByMovie,
+} from "../services/api";
 import Navbar from "../components/Navbar";
 
 const TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/w500";
@@ -14,6 +19,7 @@ export default function MovieDetail() {
   const [hoverRating, setHoverRating] = useState(0);
   const [rateMessage, setRateMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [movieRating, setMovieRating] = useState(null);
 
   useEffect(() => {
     const fetchMovie = async () => {
@@ -21,11 +27,19 @@ export default function MovieDetail() {
       try {
         const res = await getMovieById(id);
         setMovie(res.data);
+        // fetch trailer
         try {
           const trailerRes = await getTrailer(id);
           setTrailer(trailerRes.data);
         } catch {
           setTrailer(null);
+        }
+        // fetch rating stars
+        try {
+          const ratingRes = await getRatingByMovie(id);
+          setMovieRating(ratingRes.data);
+        } catch {
+          setMovieRating(null);
         }
       } catch (err) {
         console.error(err);
@@ -39,11 +53,18 @@ export default function MovieDetail() {
 
   const handleRate = async (score) => {
     try {
-      await rateMovie({ movie_id: id, rating_score: score });
+      await rateMovie({ movie_id: Number(id), rating_score: score });
       setUserRating(score);
       setRateMessage(`You rated this movie ${score}/10!`);
+
+      // Force fetch rating
+      const ratingRes = await getRatingByMovie(id);
+      console.log("New rating data:", ratingRes.data);
+      setMovieRating({ ...ratingRes.data });
+
       setTimeout(() => setRateMessage(""), 3000);
     } catch (err) {
+      console.error("Rate error:", err);
       setRateMessage(err.response?.data?.message || "Failed to rate");
     }
   };
@@ -137,8 +158,10 @@ export default function MovieDetail() {
                 </span>
               )}
               <span className="bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-full text-sm font-semibold">
-                ⭐ {parseFloat(movie.rate).toFixed(1)} ({movie.vote_count}{" "}
-                votes)
+                ⭐{" "}
+                {movieRating?.total > 0
+                  ? `${parseFloat(movieRating.average).toFixed(1)} (${movieRating.total} votes)`
+                  : "No ratings yet"}
               </span>
             </div>
 

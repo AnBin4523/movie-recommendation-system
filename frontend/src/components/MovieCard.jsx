@@ -2,8 +2,12 @@ import { useNavigate } from "react-router-dom";
 
 const TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/w500";
 
-export default function MovieCard({ movie }) {
+export default function MovieCard({ movie, rating }) {
   const navigate = useNavigate();
+
+  const displayRate = rating?.average
+    ? parseFloat(rating.average).toFixed(1)
+    : null;
 
   return (
     <div
@@ -30,9 +34,11 @@ export default function MovieCard({ movie }) {
         )}
 
         {/* Rate badge */}
-        <div className="absolute top-2 right-2 bg-black/70 text-yellow-400 text-xs px-2 py-1 rounded-full font-semibold">
-          ⭐ {movie.rate ? parseFloat(movie.rate).toFixed(1) : "N/A"}
-        </div>
+        {displayRate && (
+          <div className="absolute top-2 right-2 bg-black/70 text-yellow-400 text-xs px-2 py-1 rounded-full font-semibold">
+            ⭐ {displayRate}
+          </div>
+        )}
 
         {/* Hover overlay */}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition flex items-center justify-center">

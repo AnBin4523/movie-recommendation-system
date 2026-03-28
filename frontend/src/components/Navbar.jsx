@@ -1,13 +1,21 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
+import { useState } from "react";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [search, setSearch] = useState("");
 
   const handleLogout = () => {
     logout();
     navigate("/login");
+  };
+
+  const handleSearch = (e) => {
+    if (e.key === "Enter" && search.trim()) {
+      navigate(`/?search=${encodeURIComponent(search.trim())}`);
+    }
   };
 
   return (
@@ -22,12 +30,10 @@ export default function Navbar() {
         <input
           type="text"
           placeholder="Search movies..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={handleSearch}
           className="w-full bg-zinc-800 text-white px-4 py-2 rounded-lg outline-none focus:ring-2 focus:ring-red-600"
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              navigate(`/?search=${e.target.value}`);
-            }
-          }}
         />
       </div>
 

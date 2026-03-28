@@ -25,6 +25,9 @@ export const getTrailer = (id) => api.get(`/movies/${id}/trailer`);
 // Ratings
 export const rateMovie = (data) => api.post("/ratings", data);
 export const getMyRatings = () => api.get("/ratings/me");
+export const getRatingByMovie = (id) => api.get(`/ratings/movie/${id}`);
+export const getRatingsByMovies = (ids) =>
+  api.get(`/ratings/movies?ids=${ids.join(",")}`);
 
 // Recommendations
 export const getRecommendations = () => api.get("/recommendations");

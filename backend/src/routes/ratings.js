@@ -74,11 +74,45 @@ router.get("/me", auth, async (req, res) => {
   }
 });
 
+// GET /api/ratings/movies?ids=1,2,3,4,5
+router.get('/movies', async (req, res) => {
+  const { ids } = req.query;
+  if (!ids) return res.status(400).json({ message: 'ids required' });
+
+  const idArray = ids.split(',').map(Number);
+  const placeholders = idArray.map(() => '?').join(',');
+
+  try {
+    const [results] = await pool.execute(
+      `SELECT movie_id,
+              ROUND(AVG(rating_score), 1) as average,
+              COUNT(*) as total
+       FROM ratings
+       WHERE movie_id IN (${placeholders})
+       GROUP BY movie_id`,
+      idArray
+    );
+
+    const ratingsMap = {};
+    results.forEach(r => {
+      ratingsMap[r.movie_id] = {
+        average: r.average,
+        total:   r.total
+      };
+    });
+
+    res.json(ratingsMap);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/ratings/movie/:id  (watch detail rating)
 router.get("/movie/:id", async (req, res) => {
   try {
     const [ratings] = await pool.execute(
-      `SELECT AVG(rating_score) as average, COUNT(*) as total
+      `SELECT ROUND(AVG(rating_score), 1) as average, 
+              COUNT(*) as total
        FROM ratings WHERE movie_id = ?`,
       [req.params.id],
     );

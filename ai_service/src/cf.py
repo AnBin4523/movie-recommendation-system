@@ -77,9 +77,15 @@ def get_cf_recommendations(user_id: int, limit: int = 10):
 
         placeholders = ','.join(['%s'] * len(movie_ids))
         cursor.execute(
-            f"""SELECT movie_id, title, genres, actors, directors,
-                       plot, rate, vote_count, popularity, year_published, poster_path, trailer_key
-                FROM movies WHERE movie_id IN ({placeholders})""",
+            f"""SELECT m.movie_id, m.title, m.genres, m.actors, m.directors,
+               m.plot, m.popularity, m.year_published,
+               m.poster_path, m.trailer_key,
+               ROUND(AVG(r.rating_score), 1) as avg_rating,
+               COUNT(r.rating_score) as total_ratings
+        FROM movies m
+        LEFT JOIN ratings r ON m.movie_id = r.movie_id
+        WHERE m.movie_id IN ({placeholders})
+        GROUP BY m.movie_id""",
             movie_ids
         )
         movies = cursor.fetchall()
