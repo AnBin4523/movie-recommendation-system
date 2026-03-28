@@ -57,6 +57,7 @@ async function fetchDetail(id) {
     vote_count: detail.data.vote_count || 0,
     popularity: detail.data.popularity || 0,
     trailer_key: trailer?.key || null,
+    poster_path: detail.data.poster_path || null,
   };
 }
 
@@ -77,10 +78,11 @@ async function main() {
           `INSERT INTO movies
             (movie_id, title, original_title, year_published, duration,
             country_name, original_language, genres, actors, directors,
-            plot, rate, vote_count, popularity, trailer_key)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            plot, rate, vote_count, popularity, trailer_key, poster_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
-            trailer_key = VALUES(trailer_key)`,
+            trailer_key = VALUES(trailer_key),
+            poster_path = VALUES(poster_path)`,
           [
             d.movie_id,
             d.title,
@@ -97,6 +99,7 @@ async function main() {
             d.vote_count,
             d.popularity,
             d.trailer_key,
+            d.poster_path,
           ],
         );
         inserted++;

@@ -40,7 +40,7 @@ def get_cbf_recommendations(user_id: int, limit: int = 10):
 
         cursor.execute(
             f"""SELECT movie_id, title, genres, actors, directors,
-                       plot, rate, vote_count, popularity, year_published
+                       plot, rate, vote_count, popularity, year_published, poster_path, trailer_key
                 FROM movies
                 WHERE ({genre_conditions}) {exclude_clause}
                 ORDER BY rate DESC, popularity DESC
