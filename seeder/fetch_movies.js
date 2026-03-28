@@ -19,14 +19,21 @@ async function fetchPage(page) {
 }
 
 async function fetchDetail(id) {
-  const [detail, credits] = await Promise.all([
+  const [detail, credits, videos] = await Promise.all([
     axios.get(`https://api.themoviedb.org/3/movie/${id}`, {
       headers: { Authorization: process.env.TMDB_TOKEN },
     }),
     axios.get(`https://api.themoviedb.org/3/movie/${id}/credits`, {
       headers: { Authorization: process.env.TMDB_TOKEN },
     }),
+    axios.get(`https://api.themoviedb.org/3/movie/${id}/videos`, {
+      headers: { Authorization: process.env.TMDB_TOKEN },
+    }),
   ]);
+
+  const trailer = videos.data.results.find(
+    (v) => v.type === "Trailer" && v.site === "YouTube",
+  );
 
   return {
     movie_id: detail.data.id,
@@ -49,6 +56,7 @@ async function fetchDetail(id) {
     rate: detail.data.vote_average || 0,
     vote_count: detail.data.vote_count || 0,
     popularity: detail.data.popularity || 0,
+    trailer_key: trailer?.key || null,
   };
 }
 
@@ -66,11 +74,13 @@ async function main() {
       try {
         const d = await fetchDetail(m.id);
         await conn.execute(
-          `INSERT IGNORE INTO movies
-           (movie_id, title, original_title, year_published, duration,
+          `INSERT INTO movies
+            (movie_id, title, original_title, year_published, duration,
             country_name, original_language, genres, actors, directors,
-            plot, rate, vote_count, popularity)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            plot, rate, vote_count, popularity, trailer_key)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+            trailer_key = VALUES(trailer_key)`,
           [
             d.movie_id,
             d.title,
@@ -86,6 +96,7 @@ async function main() {
             d.rate,
             d.vote_count,
             d.popularity,
+            d.trailer_key,
           ],
         );
         inserted++;

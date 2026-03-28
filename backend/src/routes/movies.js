@@ -1,6 +1,7 @@
 const express = require("express");
 const pool = require("../config/db");
 const router = express.Router();
+const axios = require("axios");
 
 // GET /api/movies?search=&genre=&year=&language=&page=&limit=  (search bar + homepage)
 router.get("/", async (req, res) => {
@@ -71,6 +72,29 @@ router.get("/:id", async (req, res) => {
     }
 
     res.json(movies[0]);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/movies/:id/trailer
+router.get("/:id/trailer", async (req, res) => {
+  try {
+    const [movies] = await pool.execute(
+      "SELECT trailer_key FROM movies WHERE movie_id = ?",
+      [req.params.id],
+    );
+
+    if (movies.length === 0 || !movies[0].trailer_key) {
+      return res.status(404).json({ message: "No trailer found" });
+    }
+
+    const key = movies[0].trailer_key;
+    res.json({
+      trailer_key: key,
+      trailer_url: `https://www.youtube.com/watch?v=${key}`,
+      embed_url: `https://www.youtube.com/embed/${key}`,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
