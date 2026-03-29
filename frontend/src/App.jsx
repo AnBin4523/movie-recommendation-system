@@ -7,6 +7,7 @@ import Register from "./pages/Register";
 import Onboarding from "./pages/Onboarding";
 import MovieDetail from "./pages/MovieDetail";
 import Profile from "./pages/Profile";
+import AdminDashboard from "./pages/AdminDashboard";
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -25,8 +26,19 @@ function OnboardingRoute({ children }) {
 function GuestRoute({ children }) {
   const { user } = useAuth();
   if (user === undefined) return null;
-  // if already logged in → redirect to home
-  if (user && user.preferred_genres) return <Navigate to="/" replace />;
+  if (user) {
+    // Admin → redirect admin
+    if (user.role === "admin") return <Navigate to="/admin" replace />;
+    // User have genres → home
+    if (user.preferred_genres) return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
+function AdminRoute({ children }) {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== "admin") return <Navigate to="/" replace />;
   return children;
 }
 
@@ -41,6 +53,14 @@ function App() {
               <GuestRoute>
                 <Login />
               </GuestRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <AdminRoute>
+                <AdminDashboard />
+              </AdminRoute>
             }
           />
           <Route

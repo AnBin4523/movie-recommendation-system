@@ -17,6 +17,11 @@ api.interceptors.request.use((config) => {
 export const login = (data) => api.post("/auth/login", data);
 export const register = (data) => api.post("/auth/register", data);
 
+// Users
+export const getMe = () => api.get("/users/me");
+export const updateMe = (data) => api.put("/users/me", data);
+export const updatePassword = (data) => api.put("/users/me/password", data);
+
 // Movies
 export const getMovies = (params) => api.get("/movies", { params });
 export const getMovieById = (id) => api.get(`/movies/${id}`);
@@ -38,5 +43,15 @@ export const getPopular = () => api.get("/recommendations/popular");
 // Chat
 export const sendMessage = (data) => api.post("/chat", data);
 export const getChatSessions = () => api.get("/chat/sessions");
+
+// Admin
+export const getAdminStats   = () => api.get('/admin/stats');
+export const getAdminUsers   = () => api.get('/admin/users');
+export const getAdminMovies  = (params) => api.get('/movies', { params });
+export const toggleUser      = (id) => api.put(`/admin/users/${id}/toggle`);
+export const deleteUser      = (id) => api.delete(`/admin/users/${id}`);
+export const deleteMovie     = (id) => api.delete(`/admin/movies/${id}`);
+export const createMovie     = (data) => api.post('/admin/movies', data);
+export const updateMovie     = (id, data) => api.put(`/admin/movies/${id}`, data);
 
 export default api;

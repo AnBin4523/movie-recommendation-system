@@ -60,7 +60,7 @@ router.get("/me", auth, async (req, res) => {
   try {
     const [ratings] = await pool.execute(
       `SELECT r.movie_id, r.rating_score, r.rated_at,
-              m.title, m.genres, m.rate, m.popularity
+              m.title, m.genres, m.rate, m.popularity, m.poster_path, m.trailer_key
        FROM ratings r
        JOIN movies m ON r.movie_id = m.movie_id
        WHERE r.user_id = ?
@@ -75,12 +75,12 @@ router.get("/me", auth, async (req, res) => {
 });
 
 // GET /api/ratings/movies?ids=1,2,3,4,5
-router.get('/movies', async (req, res) => {
+router.get("/movies", async (req, res) => {
   const { ids } = req.query;
-  if (!ids) return res.status(400).json({ message: 'ids required' });
+  if (!ids) return res.status(400).json({ message: "ids required" });
 
-  const idArray = ids.split(',').map(Number);
-  const placeholders = idArray.map(() => '?').join(',');
+  const idArray = ids.split(",").map(Number);
+  const placeholders = idArray.map(() => "?").join(",");
 
   try {
     const [results] = await pool.execute(
@@ -90,14 +90,14 @@ router.get('/movies', async (req, res) => {
        FROM ratings
        WHERE movie_id IN (${placeholders})
        GROUP BY movie_id`,
-      idArray
+      idArray,
     );
 
     const ratingsMap = {};
-    results.forEach(r => {
+    results.forEach((r) => {
       ratingsMap[r.movie_id] = {
         average: r.average,
-        total:   r.total
+        total: r.total,
       };
     });
 

@@ -21,8 +21,10 @@ export default function Login() {
       const res = await loginApi({ email, password });
       login(res.data.user, res.data.token);
 
-      // if preferred_genres is not set → onboarding
-      if (!res.data.user.preferred_genres) {
+      if (res.data.user.role === "admin") {
+        navigate("/admin"); // admin → dashboard
+      } else if (!res.data.user.preferred_genres) {
+        // if preferred_genres is not set → onboarding
         navigate("/onboarding");
       } else {
         navigate("/");

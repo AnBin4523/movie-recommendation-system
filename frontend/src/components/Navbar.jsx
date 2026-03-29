@@ -39,6 +39,14 @@ export default function Navbar() {
 
       {/* Right */}
       <div className="flex items-center gap-4">
+        {user?.role === "admin" && (
+          <Link
+            to="/admin"
+            className="text-zinc-300 hover:text-white"
+          >
+            Dashboard
+          </Link>
+        )}
         <Link to="/profile" className="text-zinc-300 hover:text-white">
           {user?.display_name}
         </Link>
