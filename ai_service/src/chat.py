@@ -1,0 +1,276 @@
+import requests
+import json
+import re
+from database import get_connection
+
+OLLAMA_URL = "http://localhost:11434/api/chat"
+MODEL = "llama3.1"
+
+
+def search_movies_by_description(description: str, limit: int = 5):
+    """Search movies in DB based on description keywords"""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        # Extract keywords and filter stop words
+        stop_words = {
+            # English stop words
+            'a', 'an', 'the', 'is', 'it', 'in', 'on', 'at', 'to',
+            'for', 'of', 'and', 'or', 'but', 'with', 'about', 'i',
+            'me', 'my', 'want', 'like', 'movie', 'film', 'watch',
+            # Vietnamese stop words
+            'tôi', 'muốn', 'xem', 'phim', 'về', 'có', 'một', 'và',
+            'là', 'của', 'cho', 'với', 'này', 'đó', 'bộ', 'tìm'
+        }
+        keywords = [
+            k for k in description.lower().split()
+            if k not in stop_words and len(k) > 2
+        ]
+
+        if not keywords:
+            return []
+
+        # Build dynamic search query across title, plot, genres, actors
+        conditions = ' OR '.join(
+            ['title LIKE %s OR plot LIKE %s OR genres LIKE %s OR actors LIKE %s']
+            * len(keywords)
+        )
+        params = []
+        for kw in keywords:
+            params += [f'%{kw}%', f'%{kw}%', f'%{kw}%', f'%{kw}%']
+
+        cursor.execute(
+            f"""SELECT m.movie_id, m.title, m.genres, m.year_published,
+                       m.directors, m.actors, m.plot, m.poster_path,
+                       m.trailer_key, m.popularity,
+                       ROUND(AVG(r.rating_score), 1) as avg_rating,
+                       COUNT(r.rating_score) as total_ratings
+                FROM movies m
+                LEFT JOIN ratings r ON m.movie_id = r.movie_id
+                WHERE {conditions}
+                GROUP BY m.movie_id
+                ORDER BY m.popularity DESC
+                LIMIT %s""",
+            params + [limit]
+        )
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_recommended_movies(genres: list, limit: int = 5):
+    """Get recommended movies from DB based on genres list"""
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        conditions = ' OR '.join(['genres LIKE %s'] * len(genres))
+        params = [f'%{g}%' for g in genres]
+
+        cursor.execute(
+            f"""SELECT m.movie_id, m.title, m.genres, m.year_published,
+                       m.directors, m.actors, m.plot, m.poster_path,
+                       m.trailer_key, m.popularity,
+                       ROUND(AVG(r.rating_score), 1) as avg_rating,
+                       COUNT(r.rating_score) as total_ratings
+                FROM movies m
+                LEFT JOIN ratings r ON m.movie_id = r.movie_id
+                WHERE {conditions}
+                GROUP BY m.movie_id
+                ORDER BY avg_rating DESC, m.popularity DESC
+                LIMIT %s""",
+            params + [limit]
+        )
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def format_movies_for_context(movies: list) -> str:
+    """Format movie list into readable text for LLM context"""
+    if not movies:
+        return "No movies found in database."
+
+    result = []
+    for m in movies:
+        rating = (
+            f"{m['avg_rating']}/10 ({m['total_ratings']} votes)"
+            if m['avg_rating']
+            else "No ratings yet"
+        )
+        result.append(
+            f"- {m['title']} ({m['year_published']}) | "
+            f"Genres: {m['genres']} | "
+            f"Rating: {rating} | "
+            f"Directors: {m['directors']} | "
+            f"Plot: {m['plot'][:150] if m['plot'] else 'N/A'}..."
+        )
+    return '\n'.join(result)
+
+
+def detect_intent(message: str) -> dict:
+    """Use Ollama to detect user intent, genres and keywords from message.
+    Works with any language including Vietnamese.
+    Returns dict with intent, genres and keywords.
+    """
+    prompt = f"""Analyze this message and return a JSON response only, no explanation, no markdown.
+
+Message: "{message}"
+
+Return JSON with these fields:
+- intent: "recommend" | "find" | "general"
+- genres: list of genres (use exact: Action, Comedy, Drama, Horror, Science Fiction, Thriller, Romance, Animation, Documentary, Fantasy, Crime, Adventure, Mystery, History, War, Western, Music, Family)
+- keywords: list of keywords IN ENGLISH for searching movies (translate to English if needed)
+
+Example 1 - Vietnamese input "phim về người nhện":
+{{"intent": "find", "genres": ["Action"], "keywords": ["spider", "spider-man", "superhero"]}}
+
+Example 2 - English input "recommend sci-fi like Interstellar":
+{{"intent": "recommend", "genres": ["Science Fiction"], "keywords": ["space", "time travel", "epic"]}}"""
+
+    try:
+        response = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+                "options": {"temperature": 0.1}  # Low temperature for consistent structured output
+            },
+            timeout=30
+        )
+
+        if response.status_code == 200:
+            content = response.json()['message']['content']
+            # Extract JSON object from response using regex
+            json_match = re.search(r'\{.*\}', content, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+    except Exception:
+        pass
+
+    # Fallback if detection fails
+    return {"intent": "general", "genres": [], "keywords": []}
+
+
+def chat_with_ai(message: str, user_id: int = None, conversation_history: list = None):
+    """Main chat function that handles movie recommendations, movie finding, and general queries.
+    Supports multiple languages including Vietnamese.
+    Uses Ollama for intent detection and response generation.
+    """
+
+    if conversation_history is None:
+        conversation_history = []
+
+    # Detect language by checking Vietnamese special characters
+    is_vietnamese = any(c in message for c in 'àáạảãăắặẳẵấầậẩẫâêếệểễôốộổỗơớợởỡùúụủũưứựửữìíịỉĩòóọỏõđ')
+    language_instruction = "Vietnamese" if is_vietnamese else "English"
+
+    # Use Ollama to detect intent (supports any language)
+    intent_data = detect_intent(message)
+    intent = intent_data.get("intent", "general")
+    genres = intent_data.get("genres", [])
+    keywords = intent_data.get("keywords", [])
+
+    # Build DB context based on detected intent
+    db_context = ""
+
+    if intent == "find" and keywords:
+        # User is trying to find a forgotten movie — search by keywords
+        search_query = " ".join(keywords)
+        movies = search_movies_by_description(search_query, limit=5)
+        if movies:
+            db_context = (
+                f"\n\nMovies from our database that might match the description:\n"
+                f"{format_movies_for_context(movies)}"
+            )
+
+    elif intent == "recommend":
+        if genres:
+            # Recommend by detected genres
+            movies = get_recommended_movies(genres, limit=5)
+            if movies:
+                db_context = (
+                    f"\n\nMovies from our database matching your preferences:\n"
+                    f"{format_movies_for_context(movies)}"
+                )
+        elif keywords:
+            # Fallback: recommend by keywords if no genres detected
+            search_query = " ".join(keywords)
+            movies = search_movies_by_description(search_query, limit=5)
+            if movies:
+                db_context = (
+                    f"\n\nMovies from our database you might enjoy:\n"
+                    f"{format_movies_for_context(movies)}"
+                )
+    
+    # Build system prompt with DB context injected
+    system_prompt = """You are a helpful movie recommendation assistant for MovieFlix platform.
+
+MANDATORY LANGUAGE RULE:
+- You MUST respond in {language_instruction} ONLY
+- Do NOT translate your response to any other language
+- Do NOT add "(Translation: ...)" or any translation notes
+- Do NOT include text in multiple languages
+
+Your capabilities:
+1. Recommend movies based on user preferences, mood, or genre
+2. Help users find movies they've forgotten the name of
+3. Answer general questions about movies
+
+Rules:
+- Respond in {language_instruction} ONLY, no translation needed
+- If movies from database are provided below, prioritize those
+- Be friendly and concise
+- Keep responses under 200 words"""
+
+    # Inject DB context into system prompt if available
+    if db_context:
+        system_prompt += db_context
+
+    # Build full message history for multi-turn conversation
+    messages = [{"role": "system", "content": system_prompt}]
+
+    # Include last 6 messages for conversation context
+    if conversation_history:
+        messages.extend(conversation_history[-6:])
+
+    # Add current user message
+    messages.append({"role": "user", "content": message})
+
+    # Call Ollama to generate response
+    try:
+        response = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": MODEL,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "temperature": 0.7,   # Balanced creativity and consistency
+                    "num_predict": 300    # Max tokens in response
+                }
+            },
+            timeout=60
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            ai_message = data['message']['content']
+
+            return {
+                "response":        ai_message,
+                "db_context_used": bool(db_context),
+                "intent":          intent,
+                "genres":          genres
+            }
+        else:
+            return {"error": f"Ollama error: {response.status_code}"}
+
+    except requests.exceptions.ConnectionError:
+        return {"error": "Cannot connect to Ollama. Please make sure Ollama is running."}
+    except requests.exceptions.Timeout:
+        return {"error": "Ollama response timeout. Please try again."}
+    except Exception as e:
+        return {"error": str(e)}

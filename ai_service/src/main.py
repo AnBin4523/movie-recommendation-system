@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from cbf import get_cbf_recommendations
 from cf import get_cf_recommendations
+from chat import chat_with_ai
 
 app = FastAPI(title="Movie Recommendation AI Service")
 
@@ -47,3 +48,19 @@ def hybrid(user_id: int, limit: int = 10):
         status_code=400,
         detail="Not enough data for recommendations"
     )
+
+@app.post("/chat")
+def chat(request: dict):
+    message = request.get("message", "")
+    user_id = request.get("user_id")
+    history = request.get("history", [])
+
+    if not message:
+        raise HTTPException(status_code=400, detail="Message is required")
+
+    result = chat_with_ai(message, user_id, history)
+
+    if "error" in result:
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    return result
