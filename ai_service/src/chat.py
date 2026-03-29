@@ -12,13 +12,10 @@ def search_movies_by_description(description: str, limit: int = 5):
     conn = get_connection()
     cursor = conn.cursor(dictionary=True)
     try:
-        # Extract keywords and filter stop words
         stop_words = {
-            # English stop words
             'a', 'an', 'the', 'is', 'it', 'in', 'on', 'at', 'to',
             'for', 'of', 'and', 'or', 'but', 'with', 'about', 'i',
             'me', 'my', 'want', 'like', 'movie', 'film', 'watch',
-            # Vietnamese stop words
             'tôi', 'muốn', 'xem', 'phim', 'về', 'có', 'một', 'và',
             'là', 'của', 'cho', 'với', 'này', 'đó', 'bộ', 'tìm'
         }
@@ -30,7 +27,6 @@ def search_movies_by_description(description: str, limit: int = 5):
         if not keywords:
             return []
 
-        # Build dynamic search query across title, plot, genres, actors
         conditions = ' OR '.join(
             ['title LIKE %s OR plot LIKE %s OR genres LIKE %s OR actors LIKE %s']
             * len(keywords)
@@ -120,13 +116,22 @@ Message: "{message}"
 
 Return JSON with these fields:
 - intent: "recommend" | "find" | "general"
+  * Use "recommend" when user wants movie suggestions — including mood-based like "I'm sad", "I'm bored", "feeling happy tonight"
+  * Use "find" when user is trying to remember or find a specific forgotten movie
+  * Use "general" ONLY for non-movie questions
 - genres: list of genres (use exact: Action, Comedy, Drama, Horror, Science Fiction, Thriller, Romance, Animation, Documentary, Fantasy, Crime, Adventure, Mystery, History, War, Western, Music, Family)
 - keywords: list of keywords IN ENGLISH for searching movies (translate to English if needed)
 
-Example 1 - Vietnamese input "phim về người nhện":
+Example 1 - mood based "I'm sad want comedy":
+{{"intent": "recommend", "genres": ["Comedy"], "keywords": ["funny", "comedy", "lighthearted"]}}
+
+Example 2 - mood based "I'm bored tonight":
+{{"intent": "recommend", "genres": ["Comedy", "Action"], "keywords": ["fun", "entertaining", "exciting"]}}
+
+Example 3 - Vietnamese "phim về người nhện":
 {{"intent": "find", "genres": ["Action"], "keywords": ["spider", "spider-man", "superhero"]}}
 
-Example 2 - English input "recommend sci-fi like Interstellar":
+Example 4 - English "recommend sci-fi like Interstellar":
 {{"intent": "recommend", "genres": ["Science Fiction"], "keywords": ["space", "time travel", "epic"]}}"""
 
     try:
@@ -136,23 +141,29 @@ Example 2 - English input "recommend sci-fi like Interstellar":
                 "model": MODEL,
                 "messages": [{"role": "user", "content": prompt}],
                 "stream": False,
-                "options": {"temperature": 0.1}  # Low temperature for consistent structured output
+                "options": {"temperature": 0.1}
             },
             timeout=30
         )
 
         if response.status_code == 200:
             content = response.json()['message']['content']
-            # Extract JSON object from response using regex
             json_match = re.search(r'\{.*\}', content, re.DOTALL)
             if json_match:
                 return json.loads(json_match.group())
     except Exception:
         pass
 
-    # Fallback if detection fails
     return {"intent": "general", "genres": [], "keywords": []}
 
+# Filter only movies that AI actually mentioned in response
+def filter_mentioned_movies(movies: list, response: str) -> list:
+    """Return only movies that are mentioned in AI response"""
+    mentioned = []
+    for movie in movies:
+        if movie['title'].lower() in response.lower():
+            mentioned.append(movie)
+    return mentioned
 
 def chat_with_ai(message: str, user_id: int = None, conversation_history: list = None):
     """Main chat function that handles movie recommendations, movie finding, and general queries.
@@ -167,7 +178,7 @@ def chat_with_ai(message: str, user_id: int = None, conversation_history: list =
     is_vietnamese = any(c in message for c in 'àáạảãăắặẳẵấầậẩẫâêếệểễôốộổỗơớợởỡùúụủũưứựửữìíịỉĩòóọỏõđ')
     language_instruction = "Vietnamese" if is_vietnamese else "English"
 
-    # Use Ollama to detect intent (supports any language)
+    # Use Ollama to detect intent
     intent_data = detect_intent(message)
     intent = intent_data.get("intent", "general")
     genres = intent_data.get("genres", [])
@@ -177,7 +188,7 @@ def chat_with_ai(message: str, user_id: int = None, conversation_history: list =
     db_context = ""
 
     if intent == "find" and keywords:
-        # User is trying to find a forgotten movie — search by keywords
+        # User trying to find a forgotten movie
         search_query = " ".join(keywords)
         movies = search_movies_by_description(search_query, limit=5)
         if movies:
@@ -188,7 +199,6 @@ def chat_with_ai(message: str, user_id: int = None, conversation_history: list =
 
     elif intent == "recommend":
         if genres:
-            # Recommend by detected genres
             movies = get_recommended_movies(genres, limit=5)
             if movies:
                 db_context = (
@@ -196,7 +206,6 @@ def chat_with_ai(message: str, user_id: int = None, conversation_history: list =
                     f"{format_movies_for_context(movies)}"
                 )
         elif keywords:
-            # Fallback: recommend by keywords if no genres detected
             search_query = " ".join(keywords)
             movies = search_movies_by_description(search_query, limit=5)
             if movies:
@@ -204,30 +213,51 @@ def chat_with_ai(message: str, user_id: int = None, conversation_history: list =
                     f"\n\nMovies from our database you might enjoy:\n"
                     f"{format_movies_for_context(movies)}"
                 )
-    
-    # Build system prompt with DB context injected
-    system_prompt = """You are a helpful movie recommendation assistant for MovieFlix platform.
+
+    # Fix: fallback for mood-based requests misclassified as "general"
+    # If intent is general but genres were detected, still query DB
+    elif intent == "general" and genres:
+        movies = get_recommended_movies(genres, limit=5)
+        if movies:
+            db_context = (
+                f"\n\nMovies from our database you might enjoy:\n"
+                f"{format_movies_for_context(movies)}"
+            )
+
+    # Build system prompt using f-string to inject language_instruction
+    system_prompt = f"""You are a helpful movie recommendation assistant for MovieFlix platform.
 
 MANDATORY LANGUAGE RULE:
 - You MUST respond in {language_instruction} ONLY
 - Do NOT translate your response to any other language
 - Do NOT add "(Translation: ...)" or any translation notes
 - Do NOT include text in multiple languages
+- Current detected language: {language_instruction}
 
 Your capabilities:
 1. Recommend movies based on user preferences, mood, or genre
-2. Help users find movies they've forgotten the name of
+2. Help users find movies they have forgotten the name of
 3. Answer general questions about movies
 
 Rules:
 - Respond in {language_instruction} ONLY, no translation needed
-- If movies from database are provided below, prioritize those
-- Be friendly and concise
+- If movies from database are provided below, ONLY recommend movies from that list — do NOT mix with movies outside the database
+- Do NOT recommend any movie that is not explicitly listed in the database context
+- Recommend ALL movies from the database list (2-3 movies if available, 1 if only 1 found)
+- If no movies are found in database, honestly tell the user: "I couldn't find matching movies in our database, but here are some suggestions based on my knowledge:" then recommend from your own knowledge
+- Be friendly, enthusiastic, and concise
 - Keep responses under 200 words"""
 
     # Inject DB context into system prompt if available
     if db_context:
-        system_prompt += db_context
+        movie_titles = [m['title'] for m in movies]
+    titles_str = ', '.join([f'"{t}"' for t in movie_titles])
+    
+    system_prompt += f"""
+
+STRICT RULE: You can ONLY recommend these exact movies from our database:
+{titles_str}
+Do NOT recommend any other movie under any circumstances."""
 
     # Build full message history for multi-turn conversation
     messages = [{"role": "system", "content": system_prompt}]
@@ -248,8 +278,8 @@ Rules:
                 "messages": messages,
                 "stream": False,
                 "options": {
-                    "temperature": 0.7,   # Balanced creativity and consistency
-                    "num_predict": 300    # Max tokens in response
+                    "temperature": 0.7,
+                    "num_predict": 500
                 }
             },
             timeout=60
@@ -258,12 +288,15 @@ Rules:
         if response.status_code == 200:
             data = response.json()
             ai_message = data['message']['content']
+            mentioned_movies = filter_mentioned_movies(movies, ai_message) if movies else []
 
             return {
                 "response":        ai_message,
                 "db_context_used": bool(db_context),
+                "db_movies":       db_context,
                 "intent":          intent,
-                "genres":          genres
+                "genres":          genres,
+                "recommended_movies":  mentioned_movies
             }
         else:
             return {"error": f"Ollama error: {response.status_code}"}

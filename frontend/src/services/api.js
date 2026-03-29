@@ -43,6 +43,8 @@ export const getPopular = () => api.get("/recommendations/popular");
 // Chat
 export const sendMessage = (data) => api.post("/chat", data);
 export const getChatSessions = () => api.get("/chat/sessions");
+export const endChatSession = (id) => api.put(`/chat/sessions/${id}/end`);
+export const getChatMessages  = (id) => api.get(`/chat/sessions/${id}/messages`);
 
 // Admin
 export const getAdminStats   = () => api.get('/admin/stats');
