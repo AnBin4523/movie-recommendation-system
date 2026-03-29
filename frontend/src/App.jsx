@@ -8,6 +8,7 @@ import Onboarding from "./pages/Onboarding";
 import MovieDetail from "./pages/MovieDetail";
 import Profile from "./pages/Profile";
 import AdminDashboard from "./pages/AdminDashboard";
+import ChatBot from "./components/ChatBot";
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -104,6 +105,7 @@ function App() {
             }
           />
         </Routes>
+        <ChatBot />
       </BrowserRouter>
     </AuthProvider>
   );
