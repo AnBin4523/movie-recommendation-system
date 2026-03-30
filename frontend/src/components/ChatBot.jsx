@@ -194,6 +194,9 @@ export default function ChatBot() {
   // Don't show chatbot for admin
   if (user?.role === "admin") return null;
 
+  // Don't show chatbot if user is not logged in 
+  if (!user) return null;
+
   return (
     <>
       {/* Chat Window */}
