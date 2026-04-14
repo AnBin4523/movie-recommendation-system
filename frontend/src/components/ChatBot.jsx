@@ -190,12 +190,14 @@ export default function ChatBot() {
     setSessionId(null);
     setMessages([INITIAL_MESSAGE(user?.display_name)]);
   };
+  // Don't show chatbot if user is not logged in
+  if (!user) return null;
 
   // Don't show chatbot for admin
   if (user?.role === "admin") return null;
 
-  // Don't show chatbot if user is not logged in 
-  if (!user) return null;
+  // Don't show chatbot on onboarding page
+  if (!user.preferred_genres) return null;
 
   return (
     <>
