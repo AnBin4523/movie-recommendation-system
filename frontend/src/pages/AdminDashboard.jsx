@@ -12,6 +12,112 @@ import {
   updateMovie,
 } from "../services/api";
 
+const ROWS_PER_PAGE = 20;
+
+const EMPTY_FORM = {
+  movie_id: "",
+  title: "",
+  original_title: "",
+  year_published: "",
+  duration: "",
+  country_name: "",
+  original_language: "",
+  genres: "",
+  actors: "",
+  directors: "",
+  plot: "",
+  poster_path: "",
+  trailer_key: "",
+};
+
+const FORM_FIELDS = [
+  { name: "movie_id", label: "Movie ID", disabled: true },
+  { name: "title", label: "Title" },
+  { name: "original_title", label: "Original Title" },
+  { name: "year_published", label: "Year" },
+  { name: "duration", label: "Duration (min)" },
+  { name: "country_name", label: "Country" },
+  { name: "original_language", label: "Language (en, fr, ko...)" },
+  { name: "genres", label: "Genres (comma separated)" },
+  { name: "actors", label: "Actors", wide: true },
+  { name: "directors", label: "Directors", wide: true },
+  { name: "poster_path", label: "Poster Path (e.g. /abc.jpg)" },
+  { name: "trailer_key", label: "YouTube Trailer Key" },
+];
+
+// Reusable pagination component
+function Pagination({ currentPage, totalPages, onPageChange }) {
+  if (totalPages <= 1) return null;
+
+  const pages = [];
+  const delta = 2;
+  const left = currentPage - delta;
+  const right = currentPage + delta;
+
+  for (let i = 1; i <= totalPages; i++) {
+    if (i === 1 || i === totalPages || (i >= left && i <= right)) {
+      pages.push(i);
+    }
+  }
+
+  // Add ellipsis
+  const withEllipsis = [];
+  let prev = null;
+  for (const page of pages) {
+    if (prev && page - prev > 1) {
+      withEllipsis.push("...");
+    }
+    withEllipsis.push(page);
+    prev = page;
+  }
+
+  return (
+    <div className="flex items-center justify-between mt-4 pt-4 border-t border-zinc-800">
+      <p className="text-zinc-400 text-sm">
+        Page {currentPage} of {totalPages}
+      </p>
+      <div className="flex gap-1">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="px-3 py-1 rounded bg-zinc-800 text-zinc-400 hover:bg-zinc-700 disabled:opacity-40 text-sm"
+        >
+          ←
+        </button>
+        {withEllipsis.map((p, idx) =>
+          p === "..." ? (
+            <span
+              key={`ellipsis-${idx}`}
+              className="px-3 py-1 text-zinc-500 text-sm"
+            >
+              ...
+            </span>
+          ) : (
+            <button
+              key={p}
+              onClick={() => onPageChange(p)}
+              className={`px-3 py-1 rounded text-sm ${
+                p === currentPage
+                  ? "bg-red-600 text-white"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+              }`}
+            >
+              {p}
+            </button>
+          ),
+        )}
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="px-3 py-1 rounded bg-zinc-800 text-zinc-400 hover:bg-zinc-700 disabled:opacity-40 text-sm"
+        >
+          →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -23,27 +129,22 @@ export default function AdminDashboard() {
   const [movieSearch, setMovieSearch] = useState("");
   const [editMovie, setEditMovie] = useState(null);
   const [showAddMovie, setShowAddMovie] = useState(false);
-  const [movieForm, setMovieForm] = useState({
-    movie_id: "",
-    title: "",
-    original_title: "",
-    year_published: "",
-    duration: "",
-    country_name: "",
-    original_language: "",
-    genres: "",
-    actors: "",
-    directors: "",
-    plot: "",
-    poster_path: "",
-    trailer_key: "",
-  });
+  const [movieForm, setMovieForm] = useState(EMPTY_FORM);
   const [message, setMessage] = useState("");
   const [formError, setFormError] = useState("");
+
+  // Pagination states
+  const [userPage, setUserPage] = useState(1);
+  const [moviePage, setMoviePage] = useState(1);
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Reset movie page when searching
+  useEffect(() => {
+    setMoviePage(1);
+  }, [movieSearch]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -51,7 +152,7 @@ export default function AdminDashboard() {
       const [statsRes, usersRes, moviesRes] = await Promise.all([
         getAdminStats(),
         getAdminUsers(),
-        getAdminMovies({ limit: 300 }),
+        getAdminMovies({ limit: 1000 }),
       ]);
       setStats(statsRes.data);
       setUsers(usersRes.data);
@@ -85,6 +186,7 @@ export default function AdminDashboard() {
   };
 
   const handleSaveMovie = async () => {
+    setFormError("");
     try {
       if (editMovie) {
         await updateMovie(editMovie.movie_id, movieForm);
@@ -95,31 +197,17 @@ export default function AdminDashboard() {
       }
       setEditMovie(null);
       setShowAddMovie(false);
-      setMovieForm({
-        movie_id: "",
-        title: "",
-        original_title: "",
-        year_published: "",
-        duration: "",
-        country_name: "",
-        original_language: "",
-        genres: "",
-        actors: "",
-        directors: "",
-        plot: "",
-        poster_path: "",
-        trailer_key: "",
-      });
-      setFormError("");
+      setMovieForm(EMPTY_FORM);
       fetchData();
       setTimeout(() => setMessage(""), 3000);
     } catch (err) {
-      setFormError(err.response?.data?.message || "Error");
+      setFormError(err.response?.data?.message || "Error saving movie");
     }
   };
 
   const openEdit = (movie) => {
     setEditMovie(movie);
+    setFormError("");
     setMovieForm({
       movie_id: movie.movie_id,
       title: movie.title || "",
@@ -138,8 +226,21 @@ export default function AdminDashboard() {
     setShowAddMovie(true);
   };
 
+  // Filter + paginate movies
   const filteredMovies = movies.filter((m) =>
     m.title?.toLowerCase().includes(movieSearch.toLowerCase()),
+  );
+  const totalMoviePages = Math.ceil(filteredMovies.length / ROWS_PER_PAGE);
+  const paginatedMovies = filteredMovies.slice(
+    (moviePage - 1) * ROWS_PER_PAGE,
+    moviePage * ROWS_PER_PAGE,
+  );
+
+  // Paginate users
+  const totalUserPages = Math.ceil(users.length / ROWS_PER_PAGE);
+  const paginatedUsers = users.slice(
+    (userPage - 1) * ROWS_PER_PAGE,
+    userPage * ROWS_PER_PAGE,
   );
 
   if (loading)
@@ -153,7 +254,7 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-zinc-950 text-white">
       {/* Navbar */}
       <nav className="bg-zinc-900 px-8 py-4 flex justify-between items-center">
-        <h1 className="text-red-600 text-xl font-bold">CineAI ADMIN</h1>
+        <h1 className="text-red-600 text-xl font-bold">CINEAI ADMIN</h1>
         <div className="flex gap-3">
           <button
             onClick={() => navigate("/")}
@@ -205,23 +306,12 @@ export default function AdminDashboard() {
         {activeTab === "stats" && stats && (
           <div className="grid grid-cols-3 gap-6">
             {[
-              {
-                label: "Total Users",
-                value: stats.total_users,
-                icon: "👥",
-                color: "blue",
-              },
-              {
-                label: "Total Movies",
-                value: stats.total_movies,
-                icon: "🎬",
-                color: "red",
-              },
+              { label: "Total Users", value: stats.total_users, icon: "👥" },
+              { label: "Total Movies", value: stats.total_movies, icon: "🎬" },
               {
                 label: "Total Ratings",
                 value: stats.total_ratings,
                 icon: "⭐",
-                color: "yellow",
               },
             ].map((stat) => (
               <div
@@ -238,71 +328,88 @@ export default function AdminDashboard() {
 
         {/* Users */}
         {activeTab === "users" && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-zinc-400 border-b border-zinc-800">
-                  <th className="text-left py-3 px-4">ID</th>
-                  <th className="text-left py-3 px-4">Name</th>
-                  <th className="text-left py-3 px-4">Email</th>
-                  <th className="text-left py-3 px-4">Role</th>
-                  <th className="text-left py-3 px-4">Status</th>
-                  <th className="text-left py-3 px-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr
-                    key={user.user_id}
-                    className="border-b border-zinc-800/50 hover:bg-zinc-900"
-                  >
-                    <td className="py-3 px-4 text-zinc-400">{user.user_id}</td>
-                    <td className="py-3 px-4">{user.display_name}</td>
-                    <td className="py-3 px-4 text-zinc-400">{user.email}</td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs ${
-                          user.role === "admin"
-                            ? "bg-red-600/20 text-red-400"
-                            : "bg-zinc-700 text-zinc-300"
-                        }`}
-                      >
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs ${
-                          user.is_active
-                            ? "bg-green-500/20 text-green-400"
-                            : "bg-red-500/20 text-red-400"
-                        }`}
-                      >
-                        {user.is_active ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      {user.role !== "admin" && (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleToggleUser(user.user_id)}
-                            className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded text-xs"
-                          >
-                            {user.is_active ? "Deactivate" : "Activate"}
-                          </button>
-                          <button
-                            onClick={() => handleDeleteUser(user.user_id)}
-                            className="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white px-3 py-1 rounded text-xs transition"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      )}
-                    </td>
+          <div>
+            {/* User search info */}
+            <p className="text-zinc-400 text-sm mb-3">
+              Showing {(userPage - 1) * ROWS_PER_PAGE + 1}–
+              {Math.min(userPage * ROWS_PER_PAGE, users.length)} of{" "}
+              {users.length} users
+            </p>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-zinc-400 border-b border-zinc-800">
+                    <th className="text-left py-3 px-4">ID</th>
+                    <th className="text-left py-3 px-4">Name</th>
+                    <th className="text-left py-3 px-4">Email</th>
+                    <th className="text-left py-3 px-4">Role</th>
+                    <th className="text-left py-3 px-4">Status</th>
+                    <th className="text-left py-3 px-4">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {paginatedUsers.map((user) => (
+                    <tr
+                      key={user.user_id}
+                      className="border-b border-zinc-800/50 hover:bg-zinc-900"
+                    >
+                      <td className="py-3 px-4 text-zinc-400">
+                        {user.user_id}
+                      </td>
+                      <td className="py-3 px-4">{user.display_name}</td>
+                      <td className="py-3 px-4 text-zinc-400">{user.email}</td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs ${
+                            user.role === "admin"
+                              ? "bg-red-600/20 text-red-400"
+                              : "bg-zinc-700 text-zinc-300"
+                          }`}
+                        >
+                          {user.role}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs ${
+                            user.is_active
+                              ? "bg-green-500/20 text-green-400"
+                              : "bg-red-500/20 text-red-400"
+                          }`}
+                        >
+                          {user.is_active ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        {user.role !== "admin" && (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleToggleUser(user.user_id)}
+                              className="bg-zinc-700 hover:bg-zinc-600 px-3 py-1 rounded text-xs"
+                            >
+                              {user.is_active ? "Deactivate" : "Activate"}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(user.user_id)}
+                              className="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white px-3 py-1 rounded text-xs transition"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <Pagination
+              currentPage={userPage}
+              totalPages={totalUserPages}
+              onPageChange={setUserPage}
+            />
           </div>
         )}
 
@@ -320,28 +427,23 @@ export default function AdminDashboard() {
               <button
                 onClick={() => {
                   setEditMovie(null);
+                  setFormError("");
+                  setMovieForm(EMPTY_FORM);
                   setShowAddMovie(true);
-                  setMovieForm({
-                    movie_id: "",
-                    title: "",
-                    original_title: "",
-                    year_published: "",
-                    duration: "",
-                    country_name: "",
-                    original_language: "",
-                    genres: "",
-                    actors: "",
-                    directors: "",
-                    plot: "",
-                    poster_path: "",
-                    trailer_key: "",
-                  });
                 }}
                 className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm font-semibold"
               >
                 + Add Movie
               </button>
             </div>
+
+            {/* Showing info */}
+            <p className="text-zinc-400 text-sm mb-3">
+              Showing {(moviePage - 1) * ROWS_PER_PAGE + 1}–
+              {Math.min(moviePage * ROWS_PER_PAGE, filteredMovies.length)} of{" "}
+              {filteredMovies.length} movies
+              {movieSearch && ` (filtered from ${movies.length})`}
+            </p>
 
             {/* Movie Form Modal */}
             {showAddMovie && (
@@ -351,31 +453,10 @@ export default function AdminDashboard() {
                     {editMovie ? "Edit Movie" : "Add Movie"}
                   </h2>
                   <div className="grid grid-cols-2 gap-3">
-                    {[
-                      {
-                        name: "movie_id",
-                        label: "Movie ID",
-                        disabled: !!editMovie,
-                      },
-                      { name: "title", label: "Title" },
-                      { name: "original_title", label: "Original Title" },
-                      { name: "year_published", label: "Year" },
-                      { name: "duration", label: "Duration (min)" },
-                      { name: "country_name", label: "Country" },
-                      { name: "original_language", label: "Language" },
-                      { name: "genres", label: "Genres" },
-                      { name: "actors", label: "Actors" },
-                      { name: "directors", label: "Directors" },
-                      { name: "poster_path", label: "Poster Path" },
-                      { name: "trailer_key", label: "YouTube Trailer Key" },
-                    ].map((field) => (
+                    {FORM_FIELDS.map((field) => (
                       <div
                         key={field.name}
-                        className={
-                          field.name === "actors" || field.name === "directors"
-                            ? "col-span-2"
-                            : ""
-                        }
+                        className={field.wide ? "col-span-2" : ""}
                       >
                         <label className="text-zinc-400 text-xs mb-1 block">
                           {field.label}
@@ -383,9 +464,9 @@ export default function AdminDashboard() {
                         <input
                           type="text"
                           name={field.name}
-                          value={movieForm[field.name]}
+                          value={movieForm[field.name] || ""}
                           onChange={handleMovieFormChange}
-                          disabled={field.disabled}
+                          disabled={field.disabled && !!editMovie}
                           className="w-full bg-zinc-800 text-white px-3 py-2 rounded-lg text-sm outline-none focus:ring-2 focus:ring-red-600 disabled:opacity-50"
                         />
                       </div>
@@ -403,12 +484,15 @@ export default function AdminDashboard() {
                       />
                     </div>
                   </div>
+
+                  {/* Error message inside modal */}
+                  {formError && (
+                    <div className="bg-red-500/20 border border-red-500 text-red-400 px-4 py-3 rounded mt-3 text-sm">
+                      {formError}
+                    </div>
+                  )}
+
                   <div className="flex gap-3 mt-4">
-                    {formError && (
-                      <p className="text-red-400 text-sm w-full mb-2">
-                        {formError}
-                      </p>
-                    )}
                     <button
                       onClick={handleSaveMovie}
                       className="bg-red-600 hover:bg-red-700 px-6 py-2 rounded-lg font-semibold"
@@ -443,7 +527,7 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredMovies.map((movie) => (
+                  {paginatedMovies.map((movie) => (
                     <tr
                       key={movie.movie_id}
                       className="border-b border-zinc-800/50 hover:bg-zinc-900"
@@ -479,6 +563,12 @@ export default function AdminDashboard() {
                 </tbody>
               </table>
             </div>
+
+            <Pagination
+              currentPage={moviePage}
+              totalPages={totalMoviePages}
+              onPageChange={setMoviePage}
+            />
           </div>
         )}
       </div>
