@@ -41,7 +41,7 @@ export default function Login() {
       <div className="bg-zinc-900 p-10 rounded-xl w-full max-w-md">
         {/* Logo */}
         <h1 className="text-red-600 text-4xl font-bold text-center mb-8">
-          MOVIEFLIX
+          CINEAI
         </h1>
 
         <h2 className="text-white text-2xl font-semibold mb-6">Sign In</h2>
@@ -82,7 +82,7 @@ export default function Login() {
 
         {/* Register link */}
         <p className="text-zinc-400 text-center mt-6">
-          New to MovieFlix?{" "}
+          New to CINEAI?{" "}
           <Link
             to="/register"
             className="text-white hover:underline font-semibold"

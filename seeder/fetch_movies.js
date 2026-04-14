@@ -10,8 +10,16 @@ const DB = {
   database: process.env.DB_NAME,
 };
 
-async function fetchPage(page) {
-  const res = await axios.get("https://api.themoviedb.org/3/movie/popular", {
+// Fetch from multiple TMDB endpoints for more diverse movies
+const ENDPOINTS = [
+  { url: "https://api.themoviedb.org/3/movie/popular", pages: 10 },
+  { url: "https://api.themoviedb.org/3/movie/top_rated", pages: 10 },
+  { url: "https://api.themoviedb.org/3/movie/now_playing", pages: 5 },
+  { url: "https://api.themoviedb.org/3/movie/upcoming", pages: 5 },
+];
+
+async function fetchPage(url, page) {
+  const res = await axios.get(url, {
     headers: { Authorization: process.env.TMDB_TOKEN },
     params: { language: "en-US", page },
   });
@@ -63,56 +71,82 @@ async function fetchDetail(id) {
 
 async function main() {
   const conn = await mysql.createConnection(DB);
-  console.log(" Connected to DB");
+  console.log("Connected to DB");
 
   let inserted = 0;
+  let skipped = 0;
+  const seenIds = new Set(); // Track processed IDs to avoid duplicate API calls
 
-  for (let page = 1; page <= 10; page++) {
-    console.log(`\n Fetching page ${page}/10...`);
-    const movies = await fetchPage(page);
+  for (const endpoint of ENDPOINTS) {
+    console.log(`\nFetching from: ${endpoint.url}`);
 
-    for (const m of movies) {
+    for (let page = 1; page <= endpoint.pages; page++) {
+      console.log(`  Page ${page}/${endpoint.pages}...`);
+
       try {
-        const d = await fetchDetail(m.id);
-        await conn.execute(
-          `INSERT INTO movies
-            (movie_id, title, original_title, year_published, duration,
-            country_name, original_language, genres, actors, directors,
-            plot, rate, vote_count, popularity, trailer_key, poster_path)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-            trailer_key = VALUES(trailer_key),
-            poster_path = VALUES(poster_path)`,
-          [
-            d.movie_id,
-            d.title,
-            d.original_title,
-            d.year_published,
-            d.duration,
-            d.country_name,
-            d.original_language,
-            d.genres,
-            d.actors,
-            d.directors,
-            d.plot,
-            d.rate,
-            d.vote_count,
-            d.popularity,
-            d.trailer_key,
-            d.poster_path,
-          ],
-        );
-        inserted++;
-        console.log(` [${inserted}] ${d.title}`);
+        const movies = await fetchPage(endpoint.url, page);
+
+        for (const m of movies) {
+          // Skip if already processed this movie_id
+          if (seenIds.has(m.id)) {
+            skipped++;
+            continue;
+          }
+          seenIds.add(m.id);
+
+          try {
+            const d = await fetchDetail(m.id);
+            await conn.execute(
+              `INSERT INTO movies
+                (movie_id, title, original_title, year_published, duration,
+                country_name, original_language, genres, actors, directors,
+                plot, rate, vote_count, popularity, trailer_key, poster_path)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                  title        = VALUES(title),
+                  rate         = VALUES(rate),
+                  vote_count   = VALUES(vote_count),
+                  popularity   = VALUES(popularity),
+                  trailer_key  = VALUES(trailer_key),
+                  poster_path  = VALUES(poster_path)`,
+              [
+                d.movie_id,
+                d.title,
+                d.original_title,
+                d.year_published,
+                d.duration,
+                d.country_name,
+                d.original_language,
+                d.genres,
+                d.actors,
+                d.directors,
+                d.plot,
+                d.rate,
+                d.vote_count,
+                d.popularity,
+                d.trailer_key,
+                d.poster_path,
+              ],
+            );
+            inserted++;
+            console.log(`  [${inserted}] ${d.title}`);
+          } catch (err) {
+            console.log(`  Skip ${m.id}: ${err.message}`);
+          }
+
+          // Delay to avoid TMDB rate limit
+          await new Promise((r) => setTimeout(r, 300));
+        }
       } catch (err) {
-        console.log(` Skip ${m.id}: ${err.message}`);
+        console.log(`  Failed page ${page}: ${err.message}`);
       }
-      await new Promise((r) => setTimeout(r, 300));
     }
   }
 
   await conn.end();
-  console.log(`\nDone! Inserted ${inserted} movies`);
+  console.log(
+    `\nDone! Processed ${inserted} movies (${skipped} duplicates skipped)`,
+  );
 }
 
 main().catch(console.error);

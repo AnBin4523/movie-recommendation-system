@@ -70,7 +70,7 @@ export default function Onboarding() {
       <div className="w-full max-w-2xl">
         {/* Header */}
         <div className="text-center mb-10">
-          <h1 className="text-red-600 text-4xl font-bold mb-3">MOVIEFLIX</h1>
+          <h1 className="text-red-600 text-4xl font-bold mb-3">CineAI</h1>
           <h2 className="text-white text-2xl font-semibold">
             What do you like to watch?
           </h2>

@@ -225,7 +225,7 @@ def chat_with_ai(message: str, user_id: int = None, conversation_history: list =
             )
 
     # Build system prompt using f-string to inject language_instruction
-    system_prompt = f"""You are a helpful movie recommendation assistant for MovieFlix platform.
+    system_prompt = f"""You are a helpful movie recommendation assistant for CINEAI platform.
 
 MANDATORY LANGUAGE RULE:
 - You MUST respond in {language_instruction} ONLY

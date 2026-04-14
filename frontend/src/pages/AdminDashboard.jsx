@@ -153,7 +153,7 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-zinc-950 text-white">
       {/* Navbar */}
       <nav className="bg-zinc-900 px-8 py-4 flex justify-between items-center">
-        <h1 className="text-red-600 text-xl font-bold">MOVIEFLIX ADMIN</h1>
+        <h1 className="text-red-600 text-xl font-bold">CineAI ADMIN</h1>
         <div className="flex gap-3">
           <button
             onClick={() => navigate("/")}

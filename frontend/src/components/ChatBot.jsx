@@ -209,7 +209,7 @@ export default function ChatBot() {
                 <span className="text-xl">🤖</span>
               </div>
               <div>
-                <p className="text-white font-semibold text-sm">MovieFlix AI</p>
+                <p className="text-white font-semibold text-sm">CINEAI</p>
                 <p className="text-red-200 text-xs">Always here to help</p>
               </div>
             </div>

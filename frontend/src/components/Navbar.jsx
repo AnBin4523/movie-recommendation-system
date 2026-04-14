@@ -22,7 +22,7 @@ export default function Navbar() {
     <nav className="bg-zinc-900 px-8 py-4 flex justify-between items-center sticky top-0 z-50">
       {/* Logo */}
       <Link to="/" className="text-red-600 text-2xl font-bold">
-        MOVIEFLIX
+        CINEAI
       </Link>
 
       {/* Search */}

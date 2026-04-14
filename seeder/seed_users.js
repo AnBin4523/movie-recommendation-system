@@ -33,44 +33,47 @@ const GENRES = [
 ];
 
 function randomGenres() {
-  const shuffled = GENRES.sort(() => 0.5 - Math.random());
+  const shuffled = [...GENRES].sort(() => 0.5 - Math.random());
   return shuffled.slice(0, faker.number.int({ min: 1, max: 3 })).join(", ");
 }
 
 async function main() {
   const conn = await mysql.createConnection(DB);
-  console.log(" Connected to DB");
+  console.log("Connected to DB");
 
-  // Create 1 admin
-  const adminHash = await bcrypt.hash("admin123", 10);
-  await conn.execute(
-    `INSERT IGNORE INTO users
-     (email, password_hash, role, display_name, preferred_genres, is_active)
-     VALUES (?, ?, 'admin', ?, ?, 1)`,
-    ["admin@movie.com", adminHash, "Admin", GENRES.join(", ")],
+  // Check existing user count
+  const [[{ count }]] = await conn.execute(
+    `SELECT COUNT(*) as count FROM users WHERE role = 'user'`,
   );
-  console.log(" Admin created: admin@movie.com / admin123");
+  console.log(`Existing users: ${count}`);
 
-  // Create 100 users
-  for (let i = 1; i <= 100; i++) {
+  // Add 400 more users (total ~500 users for better CF)
+  const ADD_USERS = 400;
+  let created = 0;
+
+  for (let i = 1; i <= ADD_USERS; i++) {
     const email = faker.internet.email().toLowerCase();
     const password = await bcrypt.hash("user123", 10);
-    const display_name = faker.person.fullName();
+    const name = faker.person.fullName();
     const genres = randomGenres();
 
-    await conn.execute(
-      `INSERT IGNORE INTO users
-       (email, password_hash, role, display_name, preferred_genres, is_active)
-       VALUES (?, ?, 'user', ?, ?, 1)`,
-      [email, password, display_name, genres],
-    );
-    console.log(`  [${i}] ${display_name} - ${email}`);
+    try {
+      await conn.execute(
+        `INSERT IGNORE INTO users
+         (email, password_hash, role, display_name, preferred_genres, is_active)
+         VALUES (?, ?, 'user', ?, ?, 1)`,
+        [email, password, name, genres],
+      );
+      created++;
+      console.log(`[${created}/${ADD_USERS}] ${name} - ${email}`);
+    } catch (err) {
+      console.log(`Skip: ${err.message}`);
+    }
   }
 
   await conn.end();
-  console.log("\n Created 1 admin + 100 users");
-  console.log(" All users password: user123");
-  console.log(" Admin password: admin123");
+  console.log(`\nDone! Created ${created} new users`);
+  console.log("All new users password: user123");
 }
 
 main().catch(console.error);

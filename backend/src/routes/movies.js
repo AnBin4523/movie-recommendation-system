@@ -3,7 +3,7 @@ const pool = require("../config/db");
 const router = express.Router();
 const axios = require("axios");
 
-// GET /api/movies?search=&genre=&year=&language=&page=&limit=  (search bar + homepage)
+// GET /api/movies?search=&genre=&year=&language=&page=&limit=
 router.get("/", async (req, res) => {
   const { search, genre, year, language, page = 1, limit = 20 } = req.query;
   const offset = (page - 1) * limit;
@@ -12,19 +12,19 @@ router.get("/", async (req, res) => {
   let params = [];
 
   if (search) {
-    conditions.push("(title LIKE ? OR original_title LIKE ?)");
+    conditions.push("(m.title LIKE ? OR m.original_title LIKE ?)");
     params.push(`%${search}%`, `%${search}%`);
   }
   if (genre) {
-    conditions.push("genres LIKE ?");
+    conditions.push("m.genres LIKE ?");
     params.push(`%${genre}%`);
   }
   if (year) {
-    conditions.push("year_published = ?");
+    conditions.push("m.year_published = ?");
     params.push(year);
   }
   if (language) {
-    conditions.push("original_language = ?");
+    conditions.push("m.original_language = ?");
     params.push(language);
   }
 
@@ -32,15 +32,37 @@ router.get("/", async (req, res) => {
     conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
   try {
+    // Count total with rating threshold applied
     const [countResult] = await pool.execute(
-      `SELECT COUNT(*) as total FROM movies ${where}`,
+      `SELECT COUNT(*) as total FROM (
+        SELECT m.movie_id,
+               ROUND(AVG(r.rating_score), 1) as avg_rating,
+               COUNT(r.rating_score) as total_ratings
+        FROM movies m
+        LEFT JOIN ratings r ON m.movie_id = r.movie_id
+        ${where}
+        GROUP BY m.movie_id
+        HAVING (avg_rating IS NULL)
+            OR (total_ratings < 3)
+            OR (avg_rating >= 5)
+      ) as filtered`,
       params,
     );
     const total = countResult[0].total;
 
+    // Fetch movies with avg_rating and rating threshold
     const [movies] = await pool.execute(
-      `SELECT * FROM movies ${where}
-       ORDER BY popularity DESC
+      `SELECT m.*,
+              ROUND(AVG(r.rating_score), 1) as avg_rating,
+              COUNT(r.rating_score) as total_ratings
+       FROM movies m
+       LEFT JOIN ratings r ON m.movie_id = r.movie_id
+       ${where}
+       GROUP BY m.movie_id
+       HAVING (avg_rating IS NULL)
+           OR (total_ratings < 3)
+           OR (avg_rating >= 5)
+       ORDER BY m.popularity DESC
        LIMIT ${Number(limit)} OFFSET ${Number(offset)}`,
       params,
     );
@@ -59,7 +81,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// GET /api/movies/:id   (detail page movies)
+// GET /api/movies/:id
 router.get("/:id", async (req, res) => {
   try {
     const [movies] = await pool.execute(
@@ -99,7 +121,5 @@ router.get("/:id/trailer", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
-
-
 
 module.exports = router;
