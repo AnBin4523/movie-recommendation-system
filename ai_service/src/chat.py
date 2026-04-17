@@ -13,11 +13,26 @@ def search_movies_by_description(description: str, limit: int = 5):
     cursor = conn.cursor(dictionary=True)
     try:
         stop_words = {
+            # English articles / prepositions
             'a', 'an', 'the', 'is', 'it', 'in', 'on', 'at', 'to',
-            'for', 'of', 'and', 'or', 'but', 'with', 'about', 'i',
-            'me', 'my', 'want', 'like', 'movie', 'film', 'watch',
+            'for', 'of', 'and', 'or', 'but', 'with', 'about', 'by',
+            'from', 'up', 'out', 'so', 'if', 'as',
+            # English pronouns
+            'i', 'me', 'my', 'you', 'your', 'he', 'she', 'we', 'they',
+            'his', 'her', 'its', 'our', 'their',
+            # English verbs / auxiliaries
+            'want', 'like', 'watch', 'can', 'do', 'does', 'did',
+            'has', 'have', 'had', 'be', 'been', 'was', 'were',
+            'will', 'would', 'could', 'should', 'may', 'might',
+            'get', 'give', 'tell', 'find', 'show', 'list', 'please',
+            # English movie-request noise
+            'movie', 'film', 'series', 'franchise', 'sequel',
+            'all', 'some', 'any', 'that', 'this', 'these', 'those',
+            'are', 'how', 'what', 'who', 'which',
+            # Vietnamese
             'tôi', 'muốn', 'xem', 'phim', 'về', 'có', 'một', 'và',
-            'là', 'của', 'cho', 'với', 'này', 'đó', 'bộ', 'tìm'
+            'là', 'của', 'cho', 'với', 'này', 'đó', 'bộ', 'tìm',
+            'hãy', 'cho', 'liệt', 'kê', 'danh', 'sách',
         }
         keywords = [
             k for k in description.lower().split()
@@ -190,7 +205,7 @@ def chat_with_ai(message: str, user_id: int = None, conversation_history: list =
     if intent == "find" and keywords:
         # User trying to find a forgotten movie
         search_query = " ".join(keywords)
-        movies = search_movies_by_description(search_query, limit=5)
+        movies = search_movies_by_description(search_query, limit=10)
         if movies:
             db_context = (
                 f"\n\nMovies from our database that might match the description:\n"
@@ -199,7 +214,7 @@ def chat_with_ai(message: str, user_id: int = None, conversation_history: list =
 
     elif intent == "recommend":
         if genres:
-            movies = get_recommended_movies(genres, limit=5)
+            movies = get_recommended_movies(genres, limit=10)
             if movies:
                 db_context = (
                     f"\n\nMovies from our database matching your preferences:\n"
@@ -207,7 +222,7 @@ def chat_with_ai(message: str, user_id: int = None, conversation_history: list =
                 )
         elif keywords:
             search_query = " ".join(keywords)
-            movies = search_movies_by_description(search_query, limit=5)
+            movies = search_movies_by_description(search_query, limit=10)
             if movies:
                 db_context = (
                     f"\n\nMovies from our database you might enjoy:\n"
