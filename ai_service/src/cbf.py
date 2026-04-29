@@ -6,32 +6,37 @@ def get_cbf_recommendations(user_id: int, limit: int = 10):
     cursor = conn.cursor(dictionary=True)
 
     try:
+        # Fetch the user's preferred genres from the database
         cursor.execute(
             "SELECT preferred_genres FROM users WHERE user_id = %s",
             (user_id,)
         )
         user = cursor.fetchone()
 
+        # Return error if user has no preferred genres set
         if not user or not user['preferred_genres']:
             return {"error": "No preferred genres found."}
 
+        # Fetch all movie IDs that the user has already rated
         cursor.execute(
             "SELECT movie_id FROM ratings WHERE user_id = %s",
             (user_id,)
         )
         rated_ids = [r['movie_id'] for r in cursor.fetchall()]
 
+        # Parse preferred genres string into a list of individual genre strings
         genres = [g.strip() for g in user['preferred_genres'].split(',')]
         genre_conditions = ' OR '.join(['genres LIKE %s'] * len(genres))
         params = [f'%{g}%' for g in genres]
 
+        # Build exclusion clause to filter out movies already rated by the user
         exclude_clause = ''
         if rated_ids:
             placeholders = ','.join(['%s'] * len(rated_ids))
             exclude_clause = f'AND m.movie_id NOT IN ({placeholders})'
             params += rated_ids
 
-        # JOIN với ratings để lấy avg rating thật
+        # JOIN with ratings to get average rating and total ratings for sorting
         cursor.execute(
             f"""SELECT m.movie_id, m.title, m.genres, m.actors, m.directors,
                        m.plot, m.popularity, m.year_published, 
@@ -48,6 +53,8 @@ def get_cbf_recommendations(user_id: int, limit: int = 10):
         )
         movies = cursor.fetchall()
 
+        # Compute genre similarity score for each candidate movie
+        # similarity = number of matching genres / total number of user's preferred genres
         for movie in movies:
             movie_genres = movie['genres'].split(',') if movie['genres'] else []
             matches = sum(
