@@ -6,6 +6,16 @@ A full-stack web application that combines a hybrid movie recommendation engine 
 > Student: Ngo Le Thien An | ITITWE21117
 
 ---
+## Screenshots
+
+### Homepage
+![Homepage](./images/homepage.png)
+
+### Movie Detail Page
+![Movie Detail Page](./images/movie_detail_page.png)
+
+### AI Chatbot
+![AI Chatbot](./images/chatbot.png)
 
 ## Tech Stack
 
